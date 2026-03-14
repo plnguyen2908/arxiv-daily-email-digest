@@ -8,6 +8,12 @@ const dom = {
   fetchDate: document.getElementById("fetchDate"),
   loadDate: document.getElementById("loadDate"),
   statusText: document.getElementById("statusText"),
+  healthDataUsed: document.getElementById("healthDataUsed"),
+  healthDataLimit: document.getElementById("healthDataLimit"),
+  healthDiskUsed: document.getElementById("healthDiskUsed"),
+  healthDiskFree: document.getElementById("healthDiskFree"),
+  healthDiskTotal: document.getElementById("healthDiskTotal"),
+  healthDiskPercent: document.getElementById("healthDiskPercent"),
   progressText: document.getElementById("progressText"),
   topicsEditor: document.getElementById("topicsEditor"),
   saveTopics: document.getElementById("saveTopics"),
@@ -51,6 +57,36 @@ function todayIso() {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function toPrettyBytes(value) {
+  const size = Math.max(0, Number(value || 0));
+  if (size >= 1024 ** 3) {
+    return `${(size / 1024 ** 3).toFixed(2)} GB`;
+  }
+  if (size >= 1024 ** 2) {
+    return `${(size / 1024 ** 2).toFixed(2)} MB`;
+  }
+  if (size >= 1024) {
+    return `${(size / 1024).toFixed(2)} KB`;
+  }
+  return `${Math.round(size)} B`;
+}
+
+function getPretty(payload, keyPrefix) {
+  if (payload[`${keyPrefix}_pretty`]) {
+    return payload[`${keyPrefix}_pretty`];
+  }
+  return toPrettyBytes(payload[`${keyPrefix}_bytes`]);
+}
+
+function renderHealth(payload) {
+  dom.healthDataUsed.textContent = getPretty(payload, "data_used");
+  dom.healthDataLimit.textContent = getPretty(payload, "max_data");
+  dom.healthDiskUsed.textContent = getPretty(payload, "disk_used");
+  dom.healthDiskFree.textContent = getPretty(payload, "disk_free");
+  dom.healthDiskTotal.textContent = getPretty(payload, "disk_total");
+  dom.healthDiskPercent.textContent = `${Number(payload.disk_used_percent || 0).toFixed(2)}%`;
 }
 
 function renderTopicsEditor(topics) {
@@ -147,6 +183,11 @@ async function loadTopics() {
   renderTopicsEditor(currentTopics);
 }
 
+async function loadHealth() {
+  const payload = await api("/api/health");
+  renderHealth(payload);
+}
+
 async function saveTopics() {
   const topics = editorTopicsPayload();
   const payload = await api("/api/topics", {
@@ -187,12 +228,18 @@ async function fetchDigest(requestDate = null) {
   }
 
   dom.datePicker.value = resolvedDate;
+  await loadHealth();
 }
 
 function wireEvents() {
-  dom.saveApiBase.addEventListener("click", () => {
+  dom.saveApiBase.addEventListener("click", async () => {
     localStorage.setItem("arxiv_api_base", dom.apiBase.value.trim() || DEFAULT_API_BASE);
     setStatus("Saved API URL.");
+    try {
+      await loadHealth();
+    } catch (error) {
+      setStatus(`Saved API URL, but health check failed: ${error.message}`, true);
+    }
   });
 
   dom.saveTopics.addEventListener("click", async () => {
@@ -247,6 +294,7 @@ async function bootstrap() {
 
   try {
     await loadTopics();
+    await loadHealth();
     setStatus("Ready. Fetch today or choose a date.");
   } catch (error) {
     setStatus(`Could not load topics: ${error.message}`, true);

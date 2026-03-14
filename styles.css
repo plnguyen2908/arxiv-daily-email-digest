@@ -181,6 +181,33 @@ textarea {
   font-weight: 500;
 }
 
+.health-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.health-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #f9fcff;
+}
+
+.health-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.health-value {
+  margin: 2px 0 0;
+  color: #163250;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
 .progress {
   margin: 0;
   color: var(--muted);
