@@ -1,4 +1,4 @@
-const API_BASE = "http://136.113.34.120:8080";
+const API_BASE = "https://136.113.34.120.sslip.io";
 
 const dom = {
   datePicker: document.getElementById("datePicker"),
