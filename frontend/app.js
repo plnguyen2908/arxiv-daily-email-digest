@@ -1,8 +1,6 @@
-const DEFAULT_API_BASE = "http://localhost:8000";
+const API_BASE = "http://10.128.0.2:8080";
 
 const dom = {
-  apiBase: document.getElementById("apiBase"),
-  saveApiBase: document.getElementById("saveApiBase"),
   datePicker: document.getElementById("datePicker"),
   fetchToday: document.getElementById("fetchToday"),
   fetchDate: document.getElementById("fetchDate"),
@@ -31,12 +29,8 @@ function setStatus(message, isError = false) {
   dom.statusText.style.color = isError ? "#b42318" : "#4d6076";
 }
 
-function apiBase() {
-  return (dom.apiBase.value || DEFAULT_API_BASE).replace(/\/$/, "");
-}
-
 async function api(path, options = {}) {
-  const response = await fetch(`${apiBase()}${path}`, {
+  const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
       ...(options.headers || {}),
@@ -232,16 +226,6 @@ async function fetchDigest(requestDate = null) {
 }
 
 function wireEvents() {
-  dom.saveApiBase.addEventListener("click", async () => {
-    localStorage.setItem("arxiv_api_base", dom.apiBase.value.trim() || DEFAULT_API_BASE);
-    setStatus("Saved API URL.");
-    try {
-      await loadHealth();
-    } catch (error) {
-      setStatus(`Saved API URL, but health check failed: ${error.message}`, true);
-    }
-  });
-
   dom.saveTopics.addEventListener("click", async () => {
     try {
       await saveTopics();
@@ -286,8 +270,6 @@ function wireEvents() {
 }
 
 async function bootstrap() {
-  const savedApi = localStorage.getItem("arxiv_api_base") || DEFAULT_API_BASE;
-  dom.apiBase.value = savedApi;
   dom.datePicker.value = todayIso();
 
   wireEvents();
