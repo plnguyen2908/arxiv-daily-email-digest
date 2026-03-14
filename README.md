@@ -50,6 +50,8 @@ Important env vars:
 - `UI_DATA_DIR=data/ui_store`
 - `UI_MAX_DATA_MB=500`
 - `UI_FETCH_FALLBACK_DAYS=1`
+- `UI_DISK_MAX_USED_PERCENT=90`
+- `UI_DISK_MIN_FREE_MB=2048`
 - `CORS_ORIGINS=https://<your-gh-pages-domain>`
 
 ## Legacy Email Pipeline

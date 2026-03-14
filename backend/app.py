@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -52,6 +53,9 @@ class TopicsUpdateRequest(BaseModel):
 
 def _settings() -> dict[str, Any]:
     data_root = PROJECT_ROOT / os.getenv("UI_DATA_DIR", "data/ui_store")
+    disk_max_used_percent = float(os.getenv("UI_DISK_MAX_USED_PERCENT", "90"))
+    disk_max_used_percent = min(max(disk_max_used_percent, 1.0), 99.0)
+    disk_min_free_mb = max(0, int(os.getenv("UI_DISK_MIN_FREE_MB", "2048")))
     return {
         "timezone": os.getenv("RUN_TIMEZONE", "America/Chicago"),
         "topics_path": PROJECT_ROOT / os.getenv("TOPICS_CONFIG_PATH", "config/topics.yaml"),
@@ -59,6 +63,8 @@ def _settings() -> dict[str, Any]:
         "digests_dir": data_root / "digests",
         "max_data_bytes": max(1, int(os.getenv("UI_MAX_DATA_MB", "500"))) * 1024 * 1024,
         "fallback_days": max(1, int(os.getenv("UI_FETCH_FALLBACK_DAYS", "1"))),
+        "disk_max_used_percent": disk_max_used_percent,
+        "disk_min_free_bytes": disk_min_free_mb * 1024 * 1024,
     }
 
 
@@ -95,12 +101,42 @@ def _dir_size_bytes(path: Path) -> int:
     return total
 
 
-def _enforce_disk_budget(digests_dir: Path, max_bytes: int) -> list[str]:
+def _filesystem_usage(path: Path) -> dict[str, float]:
+    target = path
+    if not target.exists():
+        target = path.parent if path.parent.exists() else PROJECT_ROOT
+    total, used, free = shutil.disk_usage(target)
+    used_percent = (used / total * 100.0) if total else 0.0
+    return {
+        "total_bytes": float(total),
+        "used_bytes": float(used),
+        "free_bytes": float(free),
+        "used_percent": used_percent,
+    }
+
+
+def _is_over_disk_limits(
+    usage: dict[str, float],
+    *,
+    max_used_percent: float,
+    min_free_bytes: int,
+) -> bool:
+    return bool(
+        usage["used_percent"] >= max_used_percent
+        or usage["free_bytes"] <= float(min_free_bytes)
+    )
+
+
+def _enforce_disk_budget(
+    digests_dir: Path,
+    max_bytes: int,
+    *,
+    max_used_percent: float,
+    min_free_bytes: int,
+) -> dict[str, Any]:
     digests_dir.mkdir(parents=True, exist_ok=True)
     removed: list[str] = []
     current = _dir_size_bytes(digests_dir)
-    if current <= max_bytes:
-        return removed
 
     files = sorted([p for p in digests_dir.glob("*.json") if p.is_file()], key=lambda p: p.stat().st_mtime)
     for file_path in files:
@@ -110,7 +146,31 @@ def _enforce_disk_budget(digests_dir: Path, max_bytes: int) -> list[str]:
         file_path.unlink(missing_ok=True)
         current -= size
         removed.append(file_path.name)
-    return removed
+
+    usage_before = _filesystem_usage(digests_dir)
+    files = sorted([p for p in digests_dir.glob("*.json") if p.is_file()], key=lambda p: p.stat().st_mtime)
+    for file_path in files:
+        if not _is_over_disk_limits(
+            usage_before,
+            max_used_percent=max_used_percent,
+            min_free_bytes=min_free_bytes,
+        ):
+            break
+        file_path.unlink(missing_ok=True)
+        removed.append(file_path.name)
+        usage_before = _filesystem_usage(digests_dir)
+
+    usage_after = _filesystem_usage(digests_dir)
+    return {
+        "removed_files": removed,
+        "ok": not _is_over_disk_limits(
+            usage_after,
+            max_used_percent=max_used_percent,
+            min_free_bytes=min_free_bytes,
+        ),
+        "digest_used_bytes": _dir_size_bytes(digests_dir),
+        "filesystem": usage_after,
+    }
 
 
 def _load_digest(path: Path) -> dict[str, Any]:
@@ -272,12 +332,19 @@ def _startup() -> None:
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     cfg = _settings()
+    fs = _filesystem_usage(cfg["digests_dir"])
     return {
         "ok": True,
         "timezone": cfg["timezone"],
         "digests_dir": str(cfg["digests_dir"]),
         "data_used_bytes": _dir_size_bytes(cfg["digests_dir"]),
         "max_data_bytes": cfg["max_data_bytes"],
+        "disk_total_bytes": int(fs["total_bytes"]),
+        "disk_used_bytes": int(fs["used_bytes"]),
+        "disk_free_bytes": int(fs["free_bytes"]),
+        "disk_used_percent": round(fs["used_percent"], 2),
+        "disk_max_used_percent": cfg["disk_max_used_percent"],
+        "disk_min_free_bytes": cfg["disk_min_free_bytes"],
     }
 
 
@@ -361,7 +428,22 @@ def get_digest(digest_date: str) -> dict[str, Any]:
 @app.post("/api/fetch")
 def fetch_digest(req: FetchRequest) -> dict[str, Any]:
     cfg = _settings()
-    removed = _enforce_disk_budget(cfg["digests_dir"], cfg["max_data_bytes"])
+    budget = _enforce_disk_budget(
+        cfg["digests_dir"],
+        cfg["max_data_bytes"],
+        max_used_percent=cfg["disk_max_used_percent"],
+        min_free_bytes=cfg["disk_min_free_bytes"],
+    )
+    removed = list(budget["removed_files"])
+    if not budget["ok"]:
+        raise HTTPException(
+            status_code=507,
+            detail=(
+                "Disk usage limit exceeded before fetch. "
+                f"used_percent={budget['filesystem']['used_percent']:.2f} "
+                f"free_bytes={int(budget['filesystem']['free_bytes'])}"
+            ),
+        )
 
     requested_date = _today_local(cfg["timezone"]) if not req.date else _parse_date_or_400(req.date)
 
@@ -386,6 +468,23 @@ def fetch_digest(req: FetchRequest) -> dict[str, Any]:
 
         payload = _build_digest_for_date(candidate, cfg)
         _save_digest(path, payload)
+        post_save_budget = _enforce_disk_budget(
+            cfg["digests_dir"],
+            cfg["max_data_bytes"],
+            max_used_percent=cfg["disk_max_used_percent"],
+            min_free_bytes=cfg["disk_min_free_bytes"],
+        )
+        if post_save_budget["removed_files"]:
+            removed.extend([x for x in post_save_budget["removed_files"] if x not in removed])
+        if not post_save_budget["ok"]:
+            raise HTTPException(
+                status_code=507,
+                detail=(
+                    "Disk usage limit exceeded after saving digest. "
+                    f"used_percent={post_save_budget['filesystem']['used_percent']:.2f} "
+                    f"free_bytes={int(post_save_budget['filesystem']['free_bytes'])}"
+                ),
+            )
         payload["stats"] = _digest_stats(payload)
         last_payload = payload
         fallback_days = offset
