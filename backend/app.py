@@ -127,6 +127,28 @@ def _is_over_disk_limits(
     )
 
 
+def _size_fields(value_bytes: int | float) -> dict[str, Any]:
+    size = max(0.0, float(value_bytes))
+    kb = size / 1024.0
+    mb = kb / 1024.0
+    gb = mb / 1024.0
+    if gb >= 1.0:
+        pretty = f"{gb:.2f} GB"
+    elif mb >= 1.0:
+        pretty = f"{mb:.2f} MB"
+    elif kb >= 1.0:
+        pretty = f"{kb:.2f} KB"
+    else:
+        pretty = f"{int(size)} B"
+    return {
+        "bytes": int(size),
+        "kb": round(kb, 2),
+        "mb": round(mb, 2),
+        "gb": round(gb, 3),
+        "pretty": pretty,
+    }
+
+
 def _enforce_disk_budget(
     digests_dir: Path,
     max_bytes: int,
@@ -333,18 +355,42 @@ def _startup() -> None:
 def health() -> dict[str, Any]:
     cfg = _settings()
     fs = _filesystem_usage(cfg["digests_dir"])
+    data_used = _size_fields(_dir_size_bytes(cfg["digests_dir"]))
+    data_limit = _size_fields(cfg["max_data_bytes"])
+    disk_total = _size_fields(fs["total_bytes"])
+    disk_used = _size_fields(fs["used_bytes"])
+    disk_free = _size_fields(fs["free_bytes"])
+    disk_min_free = _size_fields(cfg["disk_min_free_bytes"])
     return {
         "ok": True,
         "timezone": cfg["timezone"],
         "digests_dir": str(cfg["digests_dir"]),
-        "data_used_bytes": _dir_size_bytes(cfg["digests_dir"]),
-        "max_data_bytes": cfg["max_data_bytes"],
-        "disk_total_bytes": int(fs["total_bytes"]),
-        "disk_used_bytes": int(fs["used_bytes"]),
-        "disk_free_bytes": int(fs["free_bytes"]),
+        "data_used_bytes": data_used["bytes"],
+        "data_used_mb": data_used["mb"],
+        "data_used_gb": data_used["gb"],
+        "data_used_pretty": data_used["pretty"],
+        "max_data_bytes": data_limit["bytes"],
+        "max_data_mb": data_limit["mb"],
+        "max_data_gb": data_limit["gb"],
+        "max_data_pretty": data_limit["pretty"],
+        "disk_total_bytes": disk_total["bytes"],
+        "disk_total_mb": disk_total["mb"],
+        "disk_total_gb": disk_total["gb"],
+        "disk_total_pretty": disk_total["pretty"],
+        "disk_used_bytes": disk_used["bytes"],
+        "disk_used_mb": disk_used["mb"],
+        "disk_used_gb": disk_used["gb"],
+        "disk_used_pretty": disk_used["pretty"],
+        "disk_free_bytes": disk_free["bytes"],
+        "disk_free_mb": disk_free["mb"],
+        "disk_free_gb": disk_free["gb"],
+        "disk_free_pretty": disk_free["pretty"],
         "disk_used_percent": round(fs["used_percent"], 2),
         "disk_max_used_percent": cfg["disk_max_used_percent"],
-        "disk_min_free_bytes": cfg["disk_min_free_bytes"],
+        "disk_min_free_bytes": disk_min_free["bytes"],
+        "disk_min_free_mb": disk_min_free["mb"],
+        "disk_min_free_gb": disk_min_free["gb"],
+        "disk_min_free_pretty": disk_min_free["pretty"],
     }
 
 
