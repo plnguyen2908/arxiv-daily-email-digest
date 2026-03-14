@@ -1,4 +1,4 @@
-const API_BASE = "http://10.128.0.2:8080";
+const API_BASE = "http://136.113.34.120:8080";
 
 const dom = {
   datePicker: document.getElementById("datePicker"),
