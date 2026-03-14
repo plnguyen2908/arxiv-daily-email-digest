@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src ./src
 COPY backend ./backend
 COPY config ./config
-COPY .env.example ./.env.example
 
 RUN mkdir -p /app/data/ui_store/digests
 
