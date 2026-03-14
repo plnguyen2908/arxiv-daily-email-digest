@@ -1,0 +1,105 @@
+topics:
+  - key: multimodal_llm
+    label: Multimodal LLM
+    keywords:
+      - multimodal llm
+      - audiovisual llm
+      - audio visual large language model
+      - audio visual llm
+      - vision language model
+      - vision-language model
+      - multi modal reasoning
+      - instruction tuning
+      - mllm hallucination
+      - multimodal hallucination
+      - hallucination detection
+      - factual grounding
+      - faithfulness
+      - hallucination
+    must_have_phrases:
+      - multimodal llm
+      - vision-language model
+      - vision language model
+      - mllm
+      - multimodal hallucination
+      - grounding
+    categories:
+      - cs.*
+
+  - key: benchmark_evaluation
+    label: Benchmark and Evaluation
+    keywords:
+      - audiovisual benchmark
+      - audiovisual evaluation
+      - benchmark
+      - evaluation
+      - leaderboard
+      - metrics
+      - robustness
+    must_have_phrases:
+      - benchmark
+      - evaluation
+      - leaderboard
+      - metric
+      - robustness
+    categories:
+      - cs.*
+
+  - key: audiovisual
+    label: Audiovisual
+    keywords:
+      - audiovisual
+      - audio visual
+      - audio-visual
+      - audiovideo
+      - audio-video
+      - audio video
+      - audio visual understanding
+      - audio visual reasoning
+      - sound event
+      - audio grounding
+      - sam audio
+    exclude_keywords:
+      - llm
+      - mllm
+      - vlm
+      - large language model
+      - multimodal llm
+      - vision language model
+      - vision-language model
+      - audio visual large language model
+      - audiovisual llm
+    categories:
+      - cs.*
+
+  - key: vla
+    label: Vision-Language-Action
+    keywords:
+      - vla
+      - vision language action
+      - embodied agent
+      - robotic policy
+    must_have_phrases:
+      - vision-language-action
+      - vision language action
+      - vla
+      - embodied agent
+      - robotic policy
+    categories:
+      - cs.*
+
+  - key: world_model
+    label: World Model
+    keywords:
+      - world model
+      - latent dynamics
+      - world dynamics
+      - dynamics model
+      - planning
+    must_have_phrases:
+      - world model
+      - world dynamics
+      - latent dynamics
+      - dynamics model
+    categories:
+      - cs.*

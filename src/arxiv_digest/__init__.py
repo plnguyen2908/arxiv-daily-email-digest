@@ -1,0 +1,2 @@
+"""arXiv digest package."""
+
