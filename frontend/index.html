@@ -67,7 +67,12 @@
       <section class="panel">
         <div class="panel-head">
           <h2>Keyword List</h2>
-          <button id="saveTopics" class="btn">Save Keywords</button>
+        </div>
+        <div class="topic-create">
+          <input id="newTopicKey" type="text" placeholder="Big topic key (e.g., world_model)" />
+          <input id="newTopicLabel" type="text" placeholder="Big topic label (e.g., World Model)" />
+          <input id="newTopicKeyword" type="text" placeholder="First sub-keyword" />
+          <button id="addTopicBtn" class="btn">Add Big Topic</button>
         </div>
         <div id="topicsEditor" class="topics-editor"></div>
       </section>
@@ -86,8 +91,12 @@
       <article class="topic-edit-card">
         <h3 class="topic-title"></h3>
         <p class="topic-meta"></p>
-        <label>Keywords (comma separated)</label>
-        <textarea class="keywords-input" rows="3"></textarea>
+        <div class="keyword-chip-list"></div>
+        <div class="subkeyword-row">
+          <input class="subkeyword-input" type="text" placeholder="New sub-keyword" />
+          <input class="subkeyword-password" type="password" placeholder="Password to unlock" />
+          <button class="btn add-subkeyword-btn" type="button">Add Sub-keyword</button>
+        </div>
       </article>
     </template>
 

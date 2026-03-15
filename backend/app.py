@@ -51,6 +51,18 @@ class TopicsUpdateRequest(BaseModel):
     topics: list[TopicPayload]
 
 
+class AddTopicRequest(BaseModel):
+    key: str
+    label: str = ""
+    first_keyword: str
+    categories: list[str] = Field(default_factory=lambda: ["cs.*"])
+
+
+class AddSubKeywordRequest(BaseModel):
+    subkeyword: str
+    password: str
+
+
 def _settings() -> dict[str, Any]:
     data_root = PROJECT_ROOT / os.getenv("UI_DATA_DIR", "data/ui_store")
     disk_max_used_percent = float(os.getenv("UI_DISK_MAX_USED_PERCENT", "90"))
@@ -65,6 +77,7 @@ def _settings() -> dict[str, Any]:
         "fallback_days": max(1, int(os.getenv("UI_FETCH_FALLBACK_DAYS", "1"))),
         "disk_max_used_percent": disk_max_used_percent,
         "disk_min_free_bytes": disk_min_free_mb * 1024 * 1024,
+        "keyword_admin_password": os.getenv("KEYWORD_ADMIN_PASSWORD", "Thienphuc2004"),
     }
 
 
@@ -326,6 +339,14 @@ def _save_topics_yaml(path: Path, topics: list[dict[str, Any]]) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _norm_key(value: str) -> str:
+    return (value or "").strip().lower()
+
+
+def _norm_keyword(value: str) -> str:
+    return (value or "").strip().lower()
+
+
 app = FastAPI(title="arXiv Interactive Digest API", version="1.0.0")
 
 origins_raw = os.getenv("CORS_ORIGINS", "*").strip()
@@ -430,6 +451,71 @@ def put_topics(req: TopicsUpdateRequest) -> dict[str, Any]:
 
     _save_topics_yaml(cfg["topics_path"], topics_out)
     return {"status": "ok", "topics": topics_out}
+
+
+@app.post("/api/topics")
+def add_topic(req: AddTopicRequest) -> dict[str, Any]:
+    cfg = _settings()
+    topics = _load_topics_yaml(cfg["topics_path"])
+
+    key = _norm_key(req.key)
+    label = (req.label or "").strip() or key
+    first_keyword = _norm_keyword(req.first_keyword)
+    categories = [x.strip() for x in (req.categories or []) if x.strip()]
+    if not categories:
+        categories = ["cs.*"]
+
+    if not key:
+        raise HTTPException(status_code=400, detail="Topic key is required")
+    if not first_keyword:
+        raise HTTPException(status_code=400, detail="First sub-keyword is required")
+    if any(_norm_key(str(item.get("key", ""))) == key for item in topics):
+        raise HTTPException(status_code=409, detail=f"Topic '{key}' already exists")
+
+    topics.append(
+        {
+            "key": key,
+            "label": label,
+            "keywords": [first_keyword],
+            "categories": categories,
+        }
+    )
+    _save_topics_yaml(cfg["topics_path"], topics)
+    return {"status": "ok", "topics": topics}
+
+
+@app.post("/api/topics/{topic_key}/subkeyword")
+def add_subkeyword(topic_key: str, req: AddSubKeywordRequest) -> dict[str, Any]:
+    cfg = _settings()
+    if req.password != cfg["keyword_admin_password"]:
+        raise HTTPException(status_code=403, detail="Invalid password")
+
+    target_key = _norm_key(topic_key)
+    subkeyword = _norm_keyword(req.subkeyword)
+    if not subkeyword:
+        raise HTTPException(status_code=400, detail="Sub-keyword is required")
+
+    topics = _load_topics_yaml(cfg["topics_path"])
+    match: dict[str, Any] | None = None
+    for topic in topics:
+        if _norm_key(str(topic.get("key", ""))) == target_key:
+            match = topic
+            break
+
+    if match is None:
+        raise HTTPException(status_code=404, detail=f"Topic '{target_key}' not found")
+
+    keywords = [
+        _norm_keyword(str(x))
+        for x in match.get("keywords", [])
+        if _norm_keyword(str(x))
+    ]
+    if subkeyword not in keywords:
+        keywords.append(subkeyword)
+    match["keywords"] = keywords
+
+    _save_topics_yaml(cfg["topics_path"], topics)
+    return {"status": "ok", "topic_key": target_key, "topics": topics}
 
 
 @app.get("/api/dates")

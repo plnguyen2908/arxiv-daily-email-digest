@@ -220,6 +220,13 @@ textarea {
   gap: 12px;
 }
 
+.topic-create {
+  display: grid;
+  grid-template-columns: 1.2fr 1.2fr 1fr auto;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .topic-edit-card {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -235,6 +242,30 @@ textarea {
   margin: 4px 0 8px;
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.keyword-chip-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.keyword-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f0f6fc;
+  color: #1a3553;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 4px 8px;
+}
+
+.subkeyword-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .digest-grid {
@@ -354,6 +385,11 @@ textarea {
   input,
   textarea {
     width: 100%;
+  }
+
+  .topic-create,
+  .subkeyword-row {
+    grid-template-columns: 1fr;
   }
 
   .panel-head {
