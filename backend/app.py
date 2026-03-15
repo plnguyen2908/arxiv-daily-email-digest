@@ -63,6 +63,9 @@ class AddSubKeywordRequest(BaseModel):
     password: str
 
 
+DoneLookup = dict[tuple[str, str], bool]
+
+
 def _settings() -> dict[str, Any]:
     data_root = PROJECT_ROOT / os.getenv("UI_DATA_DIR", "data/ui_store")
     disk_max_used_percent = float(os.getenv("UI_DISK_MAX_USED_PERCENT", "90"))
@@ -236,6 +239,20 @@ def _digest_stats(payload: dict[str, Any]) -> dict[str, int | bool]:
     }
 
 
+def _build_done_lookup(payload: dict[str, Any]) -> DoneLookup:
+    done_lookup: DoneLookup = {}
+    for topic in payload.get("topics", []):
+        topic_key = _norm_key(str(topic.get("key", "")))
+        if not topic_key:
+            continue
+        for paper in topic.get("papers", []):
+            arxiv_id = str(paper.get("arxiv_id", "")).strip()
+            if not arxiv_id:
+                continue
+            done_lookup[(topic_key, arxiv_id)] = bool(paper.get("done", False))
+    return done_lookup
+
+
 def _topics_as_payload(topics: list[Topic]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for topic in topics:
@@ -252,7 +269,11 @@ def _topics_as_payload(topics: list[Topic]) -> list[dict[str, Any]]:
     return out
 
 
-def _build_digest_for_date(target_date: date, settings: dict[str, Any]) -> dict[str, Any]:
+def _build_digest_for_date(
+    target_date: date,
+    settings: dict[str, Any],
+    existing_done_lookup: DoneLookup | None = None,
+) -> dict[str, Any]:
     app_cfg = load_config(PROJECT_ROOT)
     topics = load_topics(settings["topics_path"])
     start_utc, end_utc = _window_utc(target_date, settings["timezone"])
@@ -283,6 +304,7 @@ def _build_digest_for_date(target_date: date, settings: dict[str, Any]) -> dict[
 
     topics_out: list[dict[str, Any]] = []
     for topic in topics:
+        topic_key_norm = _norm_key(topic.key)
         scores = select_top_k(
             topic=topic,
             papers=day_papers,
@@ -303,7 +325,7 @@ def _build_digest_for_date(target_date: date, settings: dict[str, Any]) -> dict[
                     "published_at": paper.published_at.isoformat(),
                     "updated_at": paper.updated_at.isoformat(),
                     "score": round(score.total_corr, 6),
-                    "done": False,
+                    "done": bool((existing_done_lookup or {}).get((topic_key_norm, paper.arxiv_id), False)),
                 }
             )
         topics_out.append(
@@ -598,7 +620,15 @@ def fetch_digest(req: FetchRequest) -> dict[str, Any]:
                 from_cache = True
                 break
 
-        payload = _build_digest_for_date(candidate, cfg)
+        existing_done_lookup: DoneLookup = {}
+        if path.exists():
+            try:
+                existing_payload = _load_digest(path)
+                existing_done_lookup = _build_done_lookup(existing_payload)
+            except Exception:
+                existing_done_lookup = {}
+
+        payload = _build_digest_for_date(candidate, cfg, existing_done_lookup=existing_done_lookup)
         _save_digest(path, payload)
         post_save_budget = _enforce_disk_budget(
             cfg["digests_dir"],
