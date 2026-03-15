@@ -132,25 +132,28 @@ function renderTopicsEditor(topics) {
     renderKeywordChips(chipList, topic.keywords || []);
 
     const subInput = node.querySelector(".subkeyword-input");
-    const passInput = node.querySelector(".subkeyword-password");
     const addBtn = node.querySelector(".add-subkeyword-btn");
 
     addBtn.addEventListener("click", async () => {
       const subkeyword = (subInput.value || "").trim();
-      const password = (passInput.value || "").trim();
       if (!subkeyword) {
         setStatus("Enter a sub-keyword first.", true);
         return;
       }
-      if (!password) {
+
+      const password = window.prompt("Enter password to unlock sub-keyword add:");
+      if (password === null) {
+        return;
+      }
+      const normalizedPassword = password.trim();
+      if (!normalizedPassword) {
         setStatus("Password is required to add sub-keyword.", true);
         return;
       }
 
       try {
-        await addSubKeyword(topic.key, subkeyword, password);
+        await addSubKeyword(topic.key, subkeyword, normalizedPassword);
         subInput.value = "";
-        passInput.value = "";
         setStatus(`Added sub-keyword to ${topic.label || topic.key}.`);
       } catch (error) {
         setStatus(error.message, true);
