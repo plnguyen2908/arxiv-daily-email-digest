@@ -13,6 +13,7 @@ const dom = {
   healthDiskTotal: document.getElementById("healthDiskTotal"),
   healthDiskPercent: document.getElementById("healthDiskPercent"),
   progressText: document.getElementById("progressText"),
+  digestTabs: document.getElementById("digestTabs"),
   topicsEditor: document.getElementById("topicsEditor"),
   saveTopics: document.getElementById("saveTopics"),
   digestContainer: document.getElementById("digestContainer"),
@@ -23,6 +24,7 @@ const dom = {
 
 let currentTopics = [];
 let currentDigest = null;
+let activeTopicKey = null;
 
 function setStatus(message, isError = false) {
   dom.statusText.textContent = message;
@@ -118,6 +120,7 @@ function editorTopicsPayload() {
 
 function renderDigest(payload) {
   currentDigest = payload;
+  dom.digestTabs.innerHTML = "";
   dom.digestContainer.innerHTML = "";
 
   const stats = payload.stats || { total: 0, done: 0, remaining: 0, cleared: true };
@@ -128,47 +131,73 @@ function renderDigest(payload) {
     msg.className = "cleared";
     msg.textContent = `Date ${payload.date} is clear. No remaining papers.`;
     dom.digestContainer.appendChild(msg);
+    activeTopicKey = null;
+    return;
   }
 
-  (payload.topics || []).forEach((topic) => {
-    const block = dom.topicBlockTemplate.content.firstElementChild.cloneNode(true);
-    block.querySelector(".topic-heading").textContent = `${topic.label} (${(topic.papers || []).length})`;
-    const paperList = block.querySelector(".paper-list");
+  const topics = payload.topics || [];
+  if (topics.length === 0) {
+    const msg = document.createElement("div");
+    msg.className = "cleared";
+    msg.textContent = `No topics found for ${payload.date}.`;
+    dom.digestContainer.appendChild(msg);
+    activeTopicKey = null;
+    return;
+  }
 
-    (topic.papers || []).forEach((paper) => {
-      const card = dom.paperCardTemplate.content.firstElementChild.cloneNode(true);
-      const checkbox = card.querySelector(".paper-check");
-      checkbox.checked = !!paper.done;
-      checkbox.addEventListener("change", async () => {
-        try {
-          await api(`/api/digest/${payload.date}/toggle`, {
-            method: "POST",
-            body: JSON.stringify({
-              topic_key: topic.key,
-              arxiv_id: paper.arxiv_id,
-              done: checkbox.checked,
-            }),
-          });
-          await loadDigest(payload.date);
-        } catch (error) {
-          checkbox.checked = !checkbox.checked;
-          setStatus(error.message, true);
-        }
-      });
+  if (!activeTopicKey || !topics.some((t) => t.key === activeTopicKey)) {
+    activeTopicKey = topics[0].key;
+  }
 
-      const titleLink = card.querySelector(".paper-title");
-      titleLink.textContent = paper.title;
-      titleLink.href = paper.paper_url;
+  topics.forEach((topic) => {
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = `digest-tab${topic.key === activeTopicKey ? " active" : ""}`;
+    tab.textContent = `${topic.label} (${(topic.papers || []).length})`;
+    tab.addEventListener("click", () => {
+      activeTopicKey = topic.key;
+      renderDigest(payload);
+    });
+    dom.digestTabs.appendChild(tab);
+  });
 
-      card.querySelector(".paper-summary").textContent = paper.summary || "No summary.";
-      card.querySelector(".paper-abstract").textContent = paper.abstract || "No abstract.";
-      card.querySelector(".paper-meta").textContent = `arXiv: ${paper.arxiv_id} | score: ${paper.score}`;
+  const selectedTopic = topics.find((topic) => topic.key === activeTopicKey) || topics[0];
+  const block = dom.topicBlockTemplate.content.firstElementChild.cloneNode(true);
+  block.querySelector(".topic-heading").textContent = `${selectedTopic.label} (${(selectedTopic.papers || []).length})`;
+  const paperList = block.querySelector(".paper-list");
 
-      paperList.appendChild(card);
+  (selectedTopic.papers || []).forEach((paper) => {
+    const card = dom.paperCardTemplate.content.firstElementChild.cloneNode(true);
+    const checkbox = card.querySelector(".paper-check");
+    checkbox.checked = !!paper.done;
+    checkbox.addEventListener("change", async () => {
+      try {
+        await api(`/api/digest/${payload.date}/toggle`, {
+          method: "POST",
+          body: JSON.stringify({
+            topic_key: selectedTopic.key,
+            arxiv_id: paper.arxiv_id,
+            done: checkbox.checked,
+          }),
+        });
+        await loadDigest(payload.date);
+      } catch (error) {
+        checkbox.checked = !checkbox.checked;
+        setStatus(error.message, true);
+      }
     });
 
-    dom.digestContainer.appendChild(block);
+    const titleLink = card.querySelector(".paper-title");
+    titleLink.textContent = paper.title;
+    titleLink.href = paper.paper_url;
+
+    card.querySelector(".paper-abstract").textContent = paper.abstract || "No abstract.";
+    card.querySelector(".paper-meta").textContent = `arXiv: ${paper.arxiv_id} | score: ${paper.score}`;
+
+    paperList.appendChild(card);
   });
+
+  dom.digestContainer.appendChild(block);
 }
 
 async function loadTopics() {

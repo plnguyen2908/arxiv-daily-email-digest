@@ -242,6 +242,29 @@ textarea {
   gap: 12px;
 }
 
+.digest-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.digest-tab {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f0f5fb;
+  color: #17324e;
+  font-weight: 700;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+.digest-tab.active {
+  background: #006d77;
+  color: #ffffff;
+  border-color: #006d77;
+}
+
 .topic-block {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -285,11 +308,6 @@ textarea {
 
 .paper-title:hover {
   text-decoration: underline;
-}
-
-.paper-summary {
-  margin: 0 0 6px;
-  color: #1e3347;
 }
 
 .paper-abstract {
