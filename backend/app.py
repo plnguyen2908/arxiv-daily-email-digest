@@ -80,7 +80,7 @@ def _settings() -> dict[str, Any]:
         "fallback_days": max(1, int(os.getenv("UI_FETCH_FALLBACK_DAYS", "1"))),
         "disk_max_used_percent": disk_max_used_percent,
         "disk_min_free_bytes": disk_min_free_mb * 1024 * 1024,
-        "keyword_admin_password": os.getenv("KEYWORD_ADMIN_PASSWORD", "Thienphuc2004"),
+        "keyword_admin_password": os.getenv("KEYWORD_ADMIN_PASSWORD", ""),
     }
 
 
