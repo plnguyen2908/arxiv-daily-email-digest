@@ -150,10 +150,11 @@ function renderDigest(payload) {
   }
 
   topics.forEach((topic) => {
+    const unreadCount = (topic.papers || []).filter((p) => !p.done).length;
     const tab = document.createElement("button");
     tab.type = "button";
     tab.className = `digest-tab${topic.key === activeTopicKey ? " active" : ""}`;
-    tab.textContent = `${topic.label} (${(topic.papers || []).length})`;
+    tab.textContent = `${topic.label} (${unreadCount})`;
     tab.addEventListener("click", () => {
       activeTopicKey = topic.key;
       renderDigest(payload);
@@ -162,11 +163,12 @@ function renderDigest(payload) {
   });
 
   const selectedTopic = topics.find((topic) => topic.key === activeTopicKey) || topics[0];
+  const unreadPapers = (selectedTopic.papers || []).filter((paper) => !paper.done);
   const block = dom.topicBlockTemplate.content.firstElementChild.cloneNode(true);
-  block.querySelector(".topic-heading").textContent = `${selectedTopic.label} (${(selectedTopic.papers || []).length})`;
+  block.querySelector(".topic-heading").textContent = `${selectedTopic.label} (${unreadPapers.length})`;
   const paperList = block.querySelector(".paper-list");
 
-  (selectedTopic.papers || []).forEach((paper) => {
+  unreadPapers.forEach((paper) => {
     const card = dom.paperCardTemplate.content.firstElementChild.cloneNode(true);
     const checkbox = card.querySelector(".paper-check");
     checkbox.checked = !!paper.done;
@@ -196,6 +198,13 @@ function renderDigest(payload) {
 
     paperList.appendChild(card);
   });
+
+  if (unreadPapers.length === 0) {
+    const msg = document.createElement("div");
+    msg.className = "cleared";
+    msg.textContent = `No unread papers left for ${selectedTopic.label}.`;
+    paperList.appendChild(msg);
+  }
 
   dom.digestContainer.appendChild(block);
 }
