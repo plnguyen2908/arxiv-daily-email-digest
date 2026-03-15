@@ -15,18 +15,30 @@ const dom = {
   progressText: document.getElementById("progressText"),
   digestTabs: document.getElementById("digestTabs"),
   topicsEditor: document.getElementById("topicsEditor"),
-  saveTopics: document.getElementById("saveTopics"),
   digestContainer: document.getElementById("digestContainer"),
   topicEditorTemplate: document.getElementById("topicEditorTemplate"),
   topicBlockTemplate: document.getElementById("topicBlockTemplate"),
   paperCardTemplate: document.getElementById("paperCardTemplate"),
+  newTopicKey: document.getElementById("newTopicKey"),
+  newTopicLabel: document.getElementById("newTopicLabel"),
+  newTopicKeyword: document.getElementById("newTopicKeyword"),
+  addTopicBtn: document.getElementById("addTopicBtn"),
 };
 
 let currentTopics = [];
-let currentDigest = null;
 let activeTopicKey = null;
 
+function setText(el, value) {
+  if (!el) {
+    return;
+  }
+  el.textContent = value;
+}
+
 function setStatus(message, isError = false) {
+  if (!dom.statusText) {
+    return;
+  }
   dom.statusText.textContent = message;
   dom.statusText.style.color = isError ? "#b42318" : "#4d6076";
 }
@@ -77,54 +89,90 @@ function getPretty(payload, keyPrefix) {
 }
 
 function renderHealth(payload) {
-  dom.healthDataUsed.textContent = getPretty(payload, "data_used");
-  dom.healthDataLimit.textContent = getPretty(payload, "max_data");
-  dom.healthDiskUsed.textContent = getPretty(payload, "disk_used");
-  dom.healthDiskFree.textContent = getPretty(payload, "disk_free");
-  dom.healthDiskTotal.textContent = getPretty(payload, "disk_total");
-  dom.healthDiskPercent.textContent = `${Number(payload.disk_used_percent || 0).toFixed(2)}%`;
+  setText(dom.healthDataUsed, getPretty(payload, "data_used"));
+  setText(dom.healthDataLimit, getPretty(payload, "max_data"));
+  setText(dom.healthDiskUsed, getPretty(payload, "disk_used"));
+  setText(dom.healthDiskFree, getPretty(payload, "disk_free"));
+  setText(dom.healthDiskTotal, getPretty(payload, "disk_total"));
+  setText(dom.healthDiskPercent, `${Number(payload.disk_used_percent || 0).toFixed(2)}%`);
+}
+
+function renderKeywordChips(container, keywords) {
+  container.innerHTML = "";
+  (keywords || []).forEach((kw) => {
+    const chip = document.createElement("span");
+    chip.className = "keyword-chip";
+    chip.textContent = kw;
+    container.appendChild(chip);
+  });
+}
+
+async function addSubKeyword(topicKey, subkeyword, password) {
+  const payload = await api(`/api/topics/${encodeURIComponent(topicKey)}/subkeyword`, {
+    method: "POST",
+    body: JSON.stringify({ subkeyword, password }),
+  });
+  currentTopics = payload.topics || [];
+  renderTopicsEditor(currentTopics);
 }
 
 function renderTopicsEditor(topics) {
+  if (!dom.topicsEditor || !dom.topicEditorTemplate) {
+    return;
+  }
+
   dom.topicsEditor.innerHTML = "";
   topics.forEach((topic) => {
     const node = dom.topicEditorTemplate.content.firstElementChild.cloneNode(true);
     node.dataset.key = topic.key;
     node.querySelector(".topic-title").textContent = topic.label || topic.key;
     node.querySelector(".topic-meta").textContent = `key: ${topic.key} | categories: ${(topic.categories || []).join(", ")}`;
-    node.querySelector(".keywords-input").value = (topic.keywords || []).join(", ");
+
+    const chipList = node.querySelector(".keyword-chip-list");
+    renderKeywordChips(chipList, topic.keywords || []);
+
+    const subInput = node.querySelector(".subkeyword-input");
+    const passInput = node.querySelector(".subkeyword-password");
+    const addBtn = node.querySelector(".add-subkeyword-btn");
+
+    addBtn.addEventListener("click", async () => {
+      const subkeyword = (subInput.value || "").trim();
+      const password = (passInput.value || "").trim();
+      if (!subkeyword) {
+        setStatus("Enter a sub-keyword first.", true);
+        return;
+      }
+      if (!password) {
+        setStatus("Password is required to add sub-keyword.", true);
+        return;
+      }
+
+      try {
+        await addSubKeyword(topic.key, subkeyword, password);
+        subInput.value = "";
+        passInput.value = "";
+        setStatus(`Added sub-keyword to ${topic.label || topic.key}.`);
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+
     dom.topicsEditor.appendChild(node);
   });
 }
 
-function editorTopicsPayload() {
-  return Array.from(dom.topicsEditor.querySelectorAll(".topic-edit-card")).map((card) => {
-    const key = card.dataset.key;
-    const current = currentTopics.find((t) => t.key === key) || {};
-    const raw = card.querySelector(".keywords-input").value;
-    const keywords = raw
-      .split(",")
-      .map((x) => x.trim().toLowerCase())
-      .filter(Boolean);
-
-    return {
-      key,
-      label: current.label || key,
-      keywords,
-      categories: current.categories || ["cs.*"],
-      must_have_phrases: current.must_have_phrases || [],
-      exclude_keywords: current.exclude_keywords || [],
-    };
-  });
-}
-
 function renderDigest(payload) {
-  currentDigest = payload;
-  dom.digestTabs.innerHTML = "";
+  if (!dom.digestContainer) {
+    return;
+  }
+
+  if (dom.digestTabs) {
+    dom.digestTabs.innerHTML = "";
+  }
   dom.digestContainer.innerHTML = "";
 
   const stats = payload.stats || { total: 0, done: 0, remaining: 0, cleared: true };
-  dom.progressText.textContent = `Date ${payload.date} | total ${stats.total} | done ${stats.done} | remaining ${stats.remaining}`;
+  setText(dom.progressText, `Date ${payload.date} | total ${stats.total} | done ${stats.done} | remaining ${stats.remaining}`);
 
   if (stats.cleared) {
     const msg = document.createElement("div");
@@ -159,7 +207,9 @@ function renderDigest(payload) {
       activeTopicKey = topic.key;
       renderDigest(payload);
     });
-    dom.digestTabs.appendChild(tab);
+    if (dom.digestTabs) {
+      dom.digestTabs.appendChild(tab);
+    }
   });
 
   const selectedTopic = topics.find((topic) => topic.key === activeTopicKey) || topics[0];
@@ -220,15 +270,38 @@ async function loadHealth() {
   renderHealth(payload);
 }
 
-async function saveTopics() {
-  const topics = editorTopicsPayload();
+async function addBigTopic() {
+  const key = (dom.newTopicKey?.value || "").trim();
+  const label = (dom.newTopicLabel?.value || "").trim();
+  const firstKeyword = (dom.newTopicKeyword?.value || "").trim();
+
+  if (!key) {
+    setStatus("Big topic key is required.", true);
+    return;
+  }
+  if (!firstKeyword) {
+    setStatus("First sub-keyword is required.", true);
+    return;
+  }
+
   const payload = await api("/api/topics", {
-    method: "PUT",
-    body: JSON.stringify({ topics }),
+    method: "POST",
+    body: JSON.stringify({
+      key,
+      label,
+      first_keyword: firstKeyword,
+      categories: ["cs.*"],
+    }),
   });
+
   currentTopics = payload.topics || [];
   renderTopicsEditor(currentTopics);
-  setStatus("Keywords updated.");
+
+  if (dom.newTopicKey) dom.newTopicKey.value = "";
+  if (dom.newTopicLabel) dom.newTopicLabel.value = "";
+  if (dom.newTopicKeyword) dom.newTopicKeyword.value = "";
+
+  setStatus("Added new big topic.");
 }
 
 async function loadDigest(digestDate) {
@@ -252,63 +325,73 @@ async function fetchDigest(requestDate = null) {
 
   const fallback = Number(payload.fallback_days || 0);
   if (fallback > 0) {
-    setStatus(
-      `No papers found on ${payload.requested_date}. Fetched ${resolvedDate} instead (${fallback} day fallback).`
-    );
+    setStatus(`No papers found on ${payload.requested_date}. Fetched ${resolvedDate} instead (${fallback} day fallback).`);
   } else {
     setStatus(`Fetched digest for ${resolvedDate}.`);
   }
 
-  dom.datePicker.value = resolvedDate;
+  if (dom.datePicker) {
+    dom.datePicker.value = resolvedDate;
+  }
   await loadHealth();
 }
 
 function wireEvents() {
-  dom.saveTopics.addEventListener("click", async () => {
-    try {
-      await saveTopics();
-    } catch (error) {
-      setStatus(error.message, true);
-    }
-  });
-
-  dom.fetchToday.addEventListener("click", async () => {
-    try {
-      await fetchDigest(todayIso());
-    } catch (error) {
-      setStatus(error.message, true);
-    }
-  });
-
-  dom.fetchDate.addEventListener("click", async () => {
-    try {
-      const value = dom.datePicker.value;
-      if (!value) {
-        setStatus("Select a date first.", true);
-        return;
+  if (dom.addTopicBtn) {
+    dom.addTopicBtn.addEventListener("click", async () => {
+      try {
+        await addBigTopic();
+      } catch (error) {
+        setStatus(error.message, true);
       }
-      await fetchDigest(value);
-    } catch (error) {
-      setStatus(error.message, true);
-    }
-  });
+    });
+  }
 
-  dom.loadDate.addEventListener("click", async () => {
-    try {
-      const value = dom.datePicker.value;
-      if (!value) {
-        setStatus("Select a date first.", true);
-        return;
+  if (dom.fetchToday) {
+    dom.fetchToday.addEventListener("click", async () => {
+      try {
+        await fetchDigest(todayIso());
+      } catch (error) {
+        setStatus(error.message, true);
       }
-      await loadDigest(value);
-    } catch (error) {
-      setStatus(error.message, true);
-    }
-  });
+    });
+  }
+
+  if (dom.fetchDate) {
+    dom.fetchDate.addEventListener("click", async () => {
+      try {
+        const value = dom.datePicker?.value || "";
+        if (!value) {
+          setStatus("Select a date first.", true);
+          return;
+        }
+        await fetchDigest(value);
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+  }
+
+  if (dom.loadDate) {
+    dom.loadDate.addEventListener("click", async () => {
+      try {
+        const value = dom.datePicker?.value || "";
+        if (!value) {
+          setStatus("Select a date first.", true);
+          return;
+        }
+        await loadDigest(value);
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    });
+  }
 }
 
 async function bootstrap() {
-  dom.datePicker.value = todayIso();
+  if (dom.datePicker) {
+    dom.datePicker.value = todayIso();
+  }
 
   wireEvents();
 
